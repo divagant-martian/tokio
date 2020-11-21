@@ -1,4 +1,4 @@
-use crate::io::{Interest, PollEvented};
+use crate::io::{Interest, PollEvented, Ready};
 use crate::net::unix::SocketAddr;
 
 use std::convert::TryFrom;
@@ -273,6 +273,16 @@ impl UnixDatagram {
         self.io.connect(path)
     }
 
+    pub async fn ready(&self, interest: Interest) -> io::Result<Ready> {
+        let event = self.io.registration().readiness(interest).await?;
+        Ok(event.ready)
+    }
+
+    pub async fn writable(&self) -> io::Result<()> {
+        self.ready(Interest::WRITABLE).await?;
+        Ok(())
+    }
+
     /// Sends data on the socket to the socket's peer.
     ///
     /// # Examples
@@ -371,6 +381,11 @@ impl UnixDatagram {
         P: AsRef<Path>,
     {
         self.io.send_to(buf, target)
+    }
+
+    pub async fn readable(&self) -> io::Result<()> {
+        self.ready(Interest::READABLE).await?;
+        Ok(())
     }
 
     /// Receives data from the socket.
