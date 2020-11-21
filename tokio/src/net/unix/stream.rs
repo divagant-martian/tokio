@@ -1,5 +1,5 @@
 use crate::future::poll_fn;
-use crate::io::{AsyncRead, AsyncWrite, PollEvented, ReadBuf};
+use crate::io::{AsyncRead, AsyncWrite, Interest, PollEvented, ReadBuf, Ready};
 use crate::net::unix::split::{split, ReadHalf, WriteHalf};
 use crate::net::unix::split_owned::{split_owned, OwnedReadHalf, OwnedWriteHalf};
 use crate::net::unix::ucred::{self, UCred};
@@ -100,6 +100,37 @@ impl UnixStream {
     /// Returns the value of the `SO_ERROR` option.
     pub fn take_error(&self) -> io::Result<Option<io::Error>> {
         self.io.take_error()
+    }
+
+    pub async fn ready(&self, interest: Interest) -> io::Result<Ready> {
+        let event = self.io.registration().readiness(interest).await?;
+        Ok(event.ready)
+    }
+
+    pub async fn readable(&self) -> io::Result<()> {
+        self.ready(Interest::READABLE).await?;
+        Ok(())
+    }
+
+    pub fn try_read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        use std::io::Read;
+
+        self.io
+            .registration()
+            .try_io(Interest::READABLE, || (&*self.io).read(buf))
+    }
+
+    pub async fn writable(&self) -> io::Result<()> {
+        self.ready(Interest::WRITABLE).await?;
+        Ok(())
+    }
+
+    pub fn try_write(&self, buf: &[u8]) -> io::Result<usize> {
+        use std::io::Write;
+
+        self.io
+            .registration()
+            .try_io(Interest::WRITABLE, || (&*self.io).write(buf))
     }
 
     /// Shuts down the read, write, or both halves of this connection.
